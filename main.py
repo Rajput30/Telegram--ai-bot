@@ -44,7 +44,7 @@ def get_ai_reply(user_id: int, user_message: str) -> str:
 
     try:
         response = groq_client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             max_tokens=300,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
         )
@@ -104,7 +104,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Aarav bot is running!")
 
     def log_message(self, format, *args):
-        pass  # HTTP logs band
+        pass
 
 
 def run_health_server():
@@ -116,7 +116,6 @@ def run_health_server():
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # HTTP server alag thread me chalao
     thread = threading.Thread(target=run_health_server, daemon=True)
     thread.start()
 
