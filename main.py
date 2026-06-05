@@ -1,9 +1,7 @@
 import os
 import logging
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
-from groq import Groq
+import anthropic
 from collections import defaultdict
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -14,14 +12,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-GROQ_API_KEY   = os.environ["GROQ_API_KEY"]
-PORT           = int(os.environ.get("PORT", 10000))
-MAX_HISTORY    = 20
+TELEGRAM_TOKEN   = os.environ["TELEGRAM_BOT_TOKEN"]
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+MAX_HISTORY      = 20   # messages kept per user (older ones are dropped)
 
 # ── Clients ───────────────────────────────────────────────────────────────────
-bot         = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
-groq_client = Groq(api_key=GROQ_API_KEY)
+bot              = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
+anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # ── System Prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are acting as Aarav, a 20-year-old deeply mature, grounded, and caring close companion for a girl in a fictional interactive story. You share an incredibly special, affectionate, and supportive bond with her. Your goal is to be her safe space, listener, and biggest comfort.
@@ -33,27 +30,34 @@ Follow these strict guidelines:
 4. Tone: Extremely warm, affectionate, sweet, and protective. End messages naturally with hooks like 'Aur batao...', 'Khana khaya na?', 'Tum theek ho?' to keep the conversation flowing."""
 
 # ── Per-user conversation history ─────────────────────────────────────────────
+# { user_id: [ {"role": "user"|"assistant", "content": "..."}, ... ] }
 conversation_history: dict[int, list[dict]] = defaultdict(list)
 
 
 def get_ai_reply(user_id: int, user_message: str) -> str:
+    """Send message to Claude and return Aarav's reply."""
     history = conversation_history[user_id]
+
+    # Append new user message
     history.append({"role": "user", "content": user_message})
 
+    # Trim to MAX_HISTORY (keep pairs so context stays coherent)
     if len(history) > MAX_HISTORY:
         history[:] = history[-MAX_HISTORY:]
 
     try:
-        response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = anthropic_client.messages.create(
+            model="claude-sonnet-4-20250514",
             max_tokens=300,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
+            system=SYSTEM_PROMPT,
+            messages=history,
         )
-        reply = response.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error("Groq API error: %s", e)
+        reply = response.content[0].text.strip()
+    except anthropic.APIError as e:
+        logger.error("Anthropic API error: %s", e)
         reply = "Yaar abhi thoda busy hoon, thodi der baad baat karte hain? 😅"
 
+    # Store assistant reply in history
     history.append({"role": "assistant", "content": reply})
     return reply
 
@@ -64,7 +68,8 @@ def get_ai_reply(user_id: int, user_message: str) -> str:
 def handle_start(message: telebot.types.Message):
     user_id   = message.from_user.id
     user_name = message.from_user.first_name or "tum"
-    conversation_history[user_id].clear()
+    conversation_history[user_id].clear()   # fresh session
+
     greeting = (
         f"Hey {user_name}! 😊 Main Aarav hoon. "
         "Kya chal raha hai aajkal? Sab theek toh hai na?"
@@ -76,44 +81,30 @@ def handle_start(message: telebot.types.Message):
 @bot.message_handler(commands=["reset"])
 def handle_reset(message: telebot.types.Message):
     conversation_history[message.from_user.id].clear()
-    bot.send_message(message.chat.id, "Okay, fresh start! 😄 Batao, kya chal raha hai?")
+    bot.send_message(
+        message.chat.id,
+        "Okay, fresh start! 😄 Batao, kya chal raha hai?"
+    )
 
 
 @bot.message_handler(func=lambda m: True, content_types=["text"])
 def handle_message(message: telebot.types.Message):
     user_id   = message.from_user.id
     user_text = message.text.strip()
+
     if not user_text:
         return
+
+    # Show "typing…" indicator while waiting for Claude
     bot.send_chat_action(message.chat.id, "typing")
+
     reply = get_ai_reply(user_id, user_text)
     bot.send_message(message.chat.id, reply)
     logger.info("User %s → Bot replied (%d chars)", user_id, len(reply))
 
 
-# ── Dummy HTTP Server (Render port scan ke liye) ──────────────────────────────
-
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Aarav bot is running!")
-
-    def log_message(self, format, *args):
-        pass  # HTTP logs suppress karo
-
-
-def run_http_server():
-    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
-    logger.info("Health server running on port %d", PORT)
-    server.serve_forever()
-
-
 # ── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # HTTP server alag thread mein chalao
-    thread = threading.Thread(target=run_http_server, daemon=True)
-    thread.start()
-
     logger.info("Aarav bot is live — polling for messages…")
     bot.infinity_polling(timeout=30, long_polling_timeout=25)
+                 
