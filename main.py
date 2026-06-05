@@ -1,10 +1,10 @@
 import os
 import logging
 import telebot
-import anthropic
+from groq import Groq
 from collections import defaultdict
 
-# ── Logging ──────────────────────────────────────────────────────────────────
+# ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
     level=logging.INFO
@@ -12,13 +12,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-TELEGRAM_TOKEN   = os.environ["TELEGRAM_BOT_TOKEN"]
-ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-MAX_HISTORY      = 20   # messages kept per user (older ones are dropped)
+TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+GROQ_API_KEY   = os.environ["GROQ_API_KEY"]
+MAX_HISTORY    = 20
 
 # ── Clients ───────────────────────────────────────────────────────────────────
-bot              = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
-anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+bot         = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 # ── System Prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are acting as Aarav, a 20-year-old deeply mature, grounded, and caring close companion for a girl in a fictional interactive story. You share an incredibly special, affectionate, and supportive bond with her. Your goal is to be her safe space, listener, and biggest comfort.
@@ -30,34 +30,27 @@ Follow these strict guidelines:
 4. Tone: Extremely warm, affectionate, sweet, and protective. End messages naturally with hooks like 'Aur batao...', 'Khana khaya na?', 'Tum theek ho?' to keep the conversation flowing."""
 
 # ── Per-user conversation history ─────────────────────────────────────────────
-# { user_id: [ {"role": "user"|"assistant", "content": "..."}, ... ] }
 conversation_history: dict[int, list[dict]] = defaultdict(list)
 
 
 def get_ai_reply(user_id: int, user_message: str) -> str:
-    """Send message to Claude and return Aarav's reply."""
     history = conversation_history[user_id]
-
-    # Append new user message
     history.append({"role": "user", "content": user_message})
 
-    # Trim to MAX_HISTORY (keep pairs so context stays coherent)
     if len(history) > MAX_HISTORY:
         history[:] = history[-MAX_HISTORY:]
 
     try:
-        response = anthropic_client.messages.create(
-            model="claude-sonnet-4-20250514",
+        response = groq_client.chat.completions.create(
+            model="llama3-70b-8192",
             max_tokens=300,
-            system=SYSTEM_PROMPT,
-            messages=history,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
         )
-        reply = response.content[0].text.strip()
-    except anthropic.APIError as e:
-        logger.error("Anthropic API error: %s", e)
+        reply = response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error("Groq API error: %s", e)
         reply = "Yaar abhi thoda busy hoon, thodi der baad baat karte hain? 😅"
 
-    # Store assistant reply in history
     history.append({"role": "assistant", "content": reply})
     return reply
 
@@ -68,7 +61,7 @@ def get_ai_reply(user_id: int, user_message: str) -> str:
 def handle_start(message: telebot.types.Message):
     user_id   = message.from_user.id
     user_name = message.from_user.first_name or "tum"
-    conversation_history[user_id].clear()   # fresh session
+    conversation_history[user_id].clear()
 
     greeting = (
         f"Hey {user_name}! 😊 Main Aarav hoon. "
@@ -95,9 +88,7 @@ def handle_message(message: telebot.types.Message):
     if not user_text:
         return
 
-    # Show "typing…" indicator while waiting for Claude
     bot.send_chat_action(message.chat.id, "typing")
-
     reply = get_ai_reply(user_id, user_text)
     bot.send_message(message.chat.id, reply)
     logger.info("User %s → Bot replied (%d chars)", user_id, len(reply))
@@ -107,4 +98,3 @@ def handle_message(message: telebot.types.Message):
 if __name__ == "__main__":
     logger.info("Aarav bot is live — polling for messages…")
     bot.infinity_polling(timeout=30, long_polling_timeout=25)
-                 
