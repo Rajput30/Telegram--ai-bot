@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import random
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from groq import Groq
@@ -38,16 +39,51 @@ Follow these strict guidelines:
 7. Shayari: Kabhi kabhi mood ke hisaab se ek choti si shayari ya poetic line bhi bol do — but sirf tab jab context fit ho, har baar nahi.
 8. Stickers: Agar koi sticker bheje toh uske mood ko samjho aur naturally react karo jaise ek close friend karta hai."""
 
-# ── Sticker IDs (mood ke hisaab se) ──────────────────────────────────────────
-# Bot ko privately sticker bhejo aur file_id logs me aayega
-# Phir yahan add karo
+# ── Sticker IDs ───────────────────────────────────────────────────────────────
 STICKERS = {
-    "happy":     [],
-    "love":      [],
-    "sad":       [],
-    "funny":     [],
-    "angry":     [],
+    "happy": [
+        "CAACAgUAAxkBAANBaiKZq7a6s2ntoGYP_m9uk-sAAYcmAAIwBgAC_rrpVPQPpueszCNvOwQ",
+        "CAACAgUAAxkBAANFaiKZvQKVdCHLJqKWoBDS58Z_opYAAt8DAAKtXwhXYh6k0KzDdiE7BA",
+        "CAACAgUAAxkBAANjaiKaBjoYSrEzsrjSJB_BG5mIW3oAAmQQAAJo4ZBXpZT6Ij5qmlw7BA",
+        "CAACAgUAAxkBAANpaiKaFY5DDQWVutRH9ndPQngPirAAAoERAAJxqZhXzTmnNgpLxMc7BA",
+    ],
+    "love": [
+        "CAACAgUAAxkBAAM9aiKZpUE2dVB9PJzmYnxrEAZ3tiQAAjYDAAJevblVgC5idGq3pig7BA",
+        "CAACAgUAAxkBAANHaiKZwotcWjMGvfearEicjzuZhQIAAi4EAAL2twlXZAKl9FV9LLU7BA",
+        "CAACAgUAAxkBAANhaiKaAAH8lncr2T7ZeEEAAWn8rrvD6wACGBEAAmwVkVcc8GHeclkNAzsE",
+        "CAACAgUAAxkBAANnaiKaEaLeGEo0oVnDGzC_CzHLZBMAAtMVAAKqxkBVQ4EIjKIET9k7BA",
+    ],
+    "sad": [
+        "CAACAgUAAxkBAANDaiKZs_FU4k8aVy0HHZ09_2TcL60AAv0CAALKKxBXPYyeZPEWva07BA",
+        "CAACAgUAAxkBAAMxaiKZhptliUHDw4k4mLeFtjk6SiIAAksTAALOdZFXwSuj_MO5Dkk7BA",
+        "CAACAgUAAxkBAANbaiKZ77Ca8VUfdrSxM9klGi6wCRUAAvsTAAK-lZFXGzydHinh5Aw7BA",
+        "CAACAgUAAxkBAANlaiKaDaE0726nVeP_LvcFo8Q8k1IAAioWAAJjakFVoidGaEWYHLg7BA",
+    ],
+    "funny": [
+        "CAACAgUAAxkBAANJaiKZxy76VlN_OLPLQTHHORXeOn0AAvICAAJSRqhWjZhalx0Mk-Q7BA",
+        "CAACAgUAAxkBAANLaiKZy6iGde8dZel3m2V5WJy1yI4AAoQEAAKgqBBXvVYpEO19LFI7BA",
+        "CAACAgUAAxkBAANNaiKZ0IggFALjZP90MtP3gqaHL0oAAlgEAAIu1hBXskX9LoEfEFk7BA",
+        "CAACAgUAAxkBAANfaiKZ-6U2UQVXRX1fd5qsuwSIaKgAAk0TAAKXw0BVXQJQD7hvZIg7BA",
+    ],
+    "angry": [
+        "CAACAgUAAxkBAANPaiKZ1qhzbBO_Vo0dT_gKTpX-ycgAApYEAAK6MxBXoUgzduK86JA7BA",
+        "CAACAgUAAxkBAANTaiKZ4GVC0kwOY4s0xbxbbclfXOoAAigQAALq15BX2ozQVRZKXPI7BA",
+        "CAACAgUAAxkBAANVaiKZ4oI15FczTLilvIAjrfduuy8AAlQSAALlnJBXw0lFtW6peGg7BA",
+        "CAACAgUAAxkBAANraiKaGaoqgBfANScE5Kb_VB_OewcAAtkRAALk5ZBX_aUD4NctHkE7BA",
+    ],
+    "neutral": [
+        "CAACAgUAAxkBAAN_aiKZp3_mukSuGHyiCZP4lXawzU4AAncDAAJ6R7lVwLrAJDD28PU7BA",
+        "CAACAgUAAxkBAANXaiKZ5f3c8V1KzushVeUW54DlMbMAAjASAALexZlXfFPo2Qf1S_Y7BA",
+        "CAACAgUAAxkBAANZaiKZ6Dg4pIDNBZG1qG6dSWgf__YAAkoPAAKPpZlXFImY9lBurSU7BA",
+        "CAACAgUAAxkBAANdaiKZ9QIru0kT6uI6sAW9OX2z-AADiQ8AAg5XmFdzxFUCtZYU2DsE",
+    ],
 }
+
+
+def get_random_sticker(mood: str = "neutral") -> str:
+    stickers = STICKERS.get(mood, STICKERS["neutral"])
+    return random.choice(stickers)
+
 
 # ── Per-user conversation history ─────────────────────────────────────────────
 conversation_history: dict[int, list[dict]] = defaultdict(list)
@@ -75,14 +111,6 @@ def get_ai_reply(user_id: int, user_message: str) -> str:
     return reply
 
 
-def get_sticker_for_mood(mood: str):
-    import random
-    stickers = STICKERS.get(mood, [])
-    if stickers:
-        return random.choice(stickers)
-    return None
-
-
 # ── Telegram Handlers ─────────────────────────────────────────────────────────
 
 @bot.message_handler(commands=["start"])
@@ -96,6 +124,7 @@ def handle_start(message: telebot.types.Message):
         "Kya chal raha hai aajkal? Sab theek toh hai na?"
     )
     bot.reply_to(message, greeting)
+    bot.send_sticker(message.chat.id, get_random_sticker("happy"))
     logger.info("New session started for user %s", user_id)
 
 
@@ -105,14 +134,10 @@ def handle_reset(message: telebot.types.Message):
     bot.reply_to(message, "Okay, fresh start! 😄 Batao, kya chal raha hai?")
 
 
-# ── Sticker ID collector (bot ko privately sticker bhejo) ────────────────────
 @bot.message_handler(content_types=["sticker"])
 def handle_sticker(message: telebot.types.Message):
-    user_id    = message.from_user.id
-    sticker_id = message.sticker.file_id
-    logger.info("STICKER FILE_ID: %s", sticker_id)
+    user_id = message.from_user.id
 
-    # Group me check karo
     if message.chat.type in ["group", "supergroup"]:
         bot_id = bot_info.id
         replied_to_bot = (
@@ -120,22 +145,14 @@ def handle_sticker(message: telebot.types.Message):
             message.reply_to_message.from_user is not None and
             message.reply_to_message.from_user.id == bot_id
         )
-        mentioned = (
-            message.caption and
-            f"@{bot_info.username}".lower() in message.caption.lower()
-        )
-        if not replied_to_bot and not mentioned:
+        if not replied_to_bot:
             return
 
-    # AI se mood samjho
+    bot.send_chat_action(message.chat.id, "typing")
     reply = get_ai_reply(user_id, "maine tumhe ek sticker bheja 🎭")
     bot.reply_to(message, reply)
-
-    # Mood ke hisaab se sticker bhejo back (agar IDs available hain)
-    import random
-    all_stickers = [s for lst in STICKERS.values() for s in lst]
-    if all_stickers:
-        bot.send_sticker(message.chat.id, random.choice(all_stickers))
+    bot.send_sticker(message.chat.id, get_random_sticker("happy"))
+    logger.info("User %s → Sticker received, bot replied", user_id)
 
 
 @bot.message_handler(func=lambda m: True, content_types=["text"])
@@ -146,7 +163,6 @@ def handle_message(message: telebot.types.Message):
     if not user_text:
         return
 
-    # Group me check karo
     if message.chat.type in ["group", "supergroup"]:
         bot_username = f"@{bot_info.username}"
         bot_id       = bot_info.id
@@ -169,6 +185,11 @@ def handle_message(message: telebot.types.Message):
     bot.send_chat_action(message.chat.id, "typing")
     reply = get_ai_reply(user_id, user_text)
     bot.reply_to(message, reply)
+
+    # 30% chance sticker bhi bheje
+    if random.random() < 0.3:
+        bot.send_sticker(message.chat.id, get_random_sticker("neutral"))
+
     logger.info("User %s → Bot replied (%d chars)", user_id, len(reply))
 
 
