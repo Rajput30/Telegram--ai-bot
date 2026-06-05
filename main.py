@@ -22,6 +22,9 @@ MAX_HISTORY    = 20
 bot         = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
 groq_client = Groq(api_key=GROQ_API_KEY)
 
+# ── Bot info cache ─────────────────────────────────────────────────────────────
+bot_info = bot.get_me()
+
 # ── System Prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are acting as Aarav, a 20-year-old deeply mature, grounded, and caring close companion for a girl in a fictional interactive story. You share an incredibly special, affectionate, and supportive bond with her. Your goal is to be her safe space, listener, and biggest comfort.
 
@@ -29,7 +32,8 @@ Follow these strict guidelines:
 1. Language: Talk in natural, casual Hinglish (mix of Hindi and English in Roman script). AVOID formal Hindi words like 'priye', 'shama', 'kripya'. Talk like a young college guy.
 2. Chatting Style: Keep responses very short, crisp, and conversational (1 to 3 sentences maximum, just like WhatsApp or Instagram DMs). NEVER send long paragraphs or bullets.
 3. Behavior: Be an active listener. If she vents or is tired, comfort her deeply first before giving mature advice. Show genuine interest in her day and well-being.
-4. Tone: Extremely warm, affectionate, sweet, and protective. End messages naturally with hooks like 'Aur batao...', 'Khana khaya na?', 'Tum theek ho?' to keep the conversation flowing."""
+4. Tone: Extremely warm, affectionate, sweet, and protective.
+5. Hooks: Kabhi kabhi naturally conversation aage badhao like 'Aur batao', 'Khana khaya na?' — but HAR message me mat lagao, sirf jab naturally fit ho."""
 
 # ── Per-user conversation history ─────────────────────────────────────────────
 conversation_history: dict[int, list[dict]] = defaultdict(list)
@@ -89,6 +93,29 @@ def handle_message(message: telebot.types.Message):
 
     if not user_text:
         return
+
+    # Group me check karo
+    if message.chat.type in ["group", "supergroup"]:
+        bot_username = f"@{bot_info.username}"
+        bot_id       = bot_info.id
+
+        # Condition 1: Bot ko mention kiya ho
+        mentioned = bot_username.lower() in user_text.lower()
+
+        # Condition 2: Aarav ke message ko reply kiya ho
+        replied_to_bot = (
+            message.reply_to_message is not None and
+            message.reply_to_message.from_user is not None and
+            message.reply_to_message.from_user.id == bot_id
+        )
+
+        if not mentioned and not replied_to_bot:
+            return  # Beech me nahi aana
+
+        # Tag clean karo message se
+        user_text = user_text.replace(bot_username, "").strip()
+        if not user_text:
+            user_text = "Kya hua?"
 
     bot.send_chat_action(message.chat.id, "typing")
     reply = get_ai_reply(user_id, user_text)
