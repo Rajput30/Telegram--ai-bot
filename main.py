@@ -4,7 +4,7 @@ import threading
 import random
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
-from groq import Groq
+from openai import OpenAI  # ✅ Groq ki jagah OpenAI library
 from collections import defaultdict
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -15,13 +15,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-GROQ_API_KEY   = os.environ["GROQ_API_KEY"]
-MAX_HISTORY    = 20
+TELEGRAM_TOKEN  = os.environ["TELEGRAM_BOT_TOKEN"]
+GITHUB_TOKEN    = os.environ["GITHUB_TOKEN"]  # ✅ GROQ_API_KEY ki jagah GITHUB_TOKEN
+MAX_HISTORY     = 20
 
 # ── Clients ───────────────────────────────────────────────────────────────────
-bot         = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
-groq_client = Groq(api_key=GROQ_API_KEY)
+bot    = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
+client = OpenAI(                                         # ✅ GitHub Models client
+    base_url="https://models.inference.ai.azure.com",
+    api_key=GITHUB_TOKEN,
+)
 
 # ── Bot info cache ─────────────────────────────────────────────────────────────
 bot_info = bot.get_me()
@@ -55,9 +58,9 @@ STICKERS = {
     ],
     "sad": [
         "CAACAgUAAxkBAANDaiKZs_FU4k8aVy0HHZ09_2TcL60AAv0CAALKKxBXPYyeZPEWva07BA",
+        "CAACAgUAAxkBAAN_aiKZp3_mukSuGHyiCZP4lXawzU4AAncDAAJ6R7lVwLrAJDD28PU7BA",
         "CAACAgUAAxkBAAMxaiKZhptliUHDw4k4mLeFtjk6SiIAAksTAALOdZFXwSuj_MO5Dkk7BA",
-        "CAACAgUAAxkBAANbaiKZ77Ca8VUfdrSxM9klGi6wCRUAAvsTAAK-lZFXGzydHinh5Aw7BA",
-        "CAACAgUAAxkBAANlaiKaDaE0726nVeP_LvcFo8Q8k1IAAioWAAJjakFVoidGaEWYHLg7BA",
+        "CAACAgUAAxkBAANbaiKZ97Ca8VUfdrSxM9klGi6wCRUAAvsTAAK-lZFXGzydHinh5Aw7BA",
     ],
     "funny": [
         "CAACAgUAAxkBAANJaiKZxy76VlN_OLPLQTHHORXeOn0AAvICAAJSRqhWjZhalx0Mk-Q7BA",
@@ -72,10 +75,10 @@ STICKERS = {
         "CAACAgUAAxkBAANraiKaGaoqgBfANScE5Kb_VB_OewcAAtkRAALk5ZBX_aUD4NctHkE7BA",
     ],
     "neutral": [
-        "CAACAgUAAxkBAAN_aiKZp3_mukSuGHyiCZP4lXawzU4AAncDAAJ6R7lVwLrAJDD28PU7BA",
         "CAACAgUAAxkBAANXaiKZ5f3c8V1KzushVeUW54DlMbMAAjASAALexZlXfFPo2Qf1S_Y7BA",
         "CAACAgUAAxkBAANZaiKZ6Dg4pIDNBZG1qG6dSWgf__YAAkoPAAKPpZlXFImY9lBurSU7BA",
         "CAACAgUAAxkBAANdaiKZ9QIru0kT6uI6sAW9OX2z-AADiQ8AAg5XmFdzxFUCtZYU2DsE",
+        "CAACAgUAAxkBAANlaiKaDaE0726nVeP_LvcFo8Q8k1IAAioWAAJjakFVoidGaEWYHLg7BA",
     ],
 }
 
@@ -97,14 +100,14 @@ def get_ai_reply(user_id: int, user_message: str) -> str:
         history[:] = history[-MAX_HISTORY:]
 
     try:
-        response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # ✅ GitHub Models ka free GPT-4o-mini
             max_tokens=300,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
         )
         reply = response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error("Groq API error: %s", e)
+        logger.error("GitHub Models API error: %s", e)
         reply = "Yaar abhi thoda busy hoon, thodi der baad baat karte hain? 😅"
 
     history.append({"role": "assistant", "content": reply})
