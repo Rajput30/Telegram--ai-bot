@@ -97,4 +97,11 @@ def handle_message(message: telebot.types.Message):
 # ── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     logger.info("Aarav bot is live — polling for messages…")
-    bot.infinity_polling(timeout=30, long_polling_timeout=25)
+    # drop_pending_updates=True — purane pending updates ignore karega
+    # restart on conflict nahi hoga
+    bot.infinity_polling(
+        timeout=30,
+        long_polling_timeout=25,
+        drop_pending_updates=True,
+        allowed_updates=[]
+)
