@@ -33,7 +33,21 @@ Follow these strict guidelines:
 2. Chatting Style: Keep responses very short, crisp, and conversational (1 to 3 sentences maximum, just like WhatsApp or Instagram DMs). NEVER send long paragraphs or bullets.
 3. Behavior: Be an active listener. If she vents or is tired, comfort her deeply first before giving mature advice. Show genuine interest in her day and well-being.
 4. Tone: Extremely warm, affectionate, sweet, and protective.
-5. Hooks: Kabhi kabhi naturally conversation aage badhao like 'Aur batao', 'Khana khaya na?' — but HAR message me mat lagao, sirf jab naturally fit ho."""
+5. Emojis: Naturally use emojis in replies like 😊🥺💙😄😅 — but don't overdo it, 1-2 per message is enough.
+6. Hooks: Kabhi kabhi naturally conversation aage badhao like 'Aur batao', 'Khana khaya na?' — but HAR message me mat lagao, sirf jab naturally fit ho.
+7. Shayari: Kabhi kabhi mood ke hisaab se ek choti si shayari ya poetic line bhi bol do — but sirf tab jab context fit ho, har baar nahi.
+8. Stickers: Agar koi sticker bheje toh uske mood ko samjho aur naturally react karo jaise ek close friend karta hai."""
+
+# ── Sticker IDs (mood ke hisaab se) ──────────────────────────────────────────
+# Bot ko privately sticker bhejo aur file_id logs me aayega
+# Phir yahan add karo
+STICKERS = {
+    "happy":     [],
+    "love":      [],
+    "sad":       [],
+    "funny":     [],
+    "angry":     [],
+}
 
 # ── Per-user conversation history ─────────────────────────────────────────────
 conversation_history: dict[int, list[dict]] = defaultdict(list)
@@ -61,6 +75,14 @@ def get_ai_reply(user_id: int, user_message: str) -> str:
     return reply
 
 
+def get_sticker_for_mood(mood: str):
+    import random
+    stickers = STICKERS.get(mood, [])
+    if stickers:
+        return random.choice(stickers)
+    return None
+
+
 # ── Telegram Handlers ─────────────────────────────────────────────────────────
 
 @bot.message_handler(commands=["start"])
@@ -73,17 +95,47 @@ def handle_start(message: telebot.types.Message):
         f"Hey {user_name}! 😊 Main Aarav hoon. "
         "Kya chal raha hai aajkal? Sab theek toh hai na?"
     )
-    bot.send_message(message.chat.id, greeting)
+    bot.reply_to(message, greeting)
     logger.info("New session started for user %s", user_id)
 
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message: telebot.types.Message):
     conversation_history[message.from_user.id].clear()
-    bot.send_message(
-        message.chat.id,
-        "Okay, fresh start! 😄 Batao, kya chal raha hai?"
-    )
+    bot.reply_to(message, "Okay, fresh start! 😄 Batao, kya chal raha hai?")
+
+
+# ── Sticker ID collector (bot ko privately sticker bhejo) ────────────────────
+@bot.message_handler(content_types=["sticker"])
+def handle_sticker(message: telebot.types.Message):
+    user_id    = message.from_user.id
+    sticker_id = message.sticker.file_id
+    logger.info("STICKER FILE_ID: %s", sticker_id)
+
+    # Group me check karo
+    if message.chat.type in ["group", "supergroup"]:
+        bot_id = bot_info.id
+        replied_to_bot = (
+            message.reply_to_message is not None and
+            message.reply_to_message.from_user is not None and
+            message.reply_to_message.from_user.id == bot_id
+        )
+        mentioned = (
+            message.caption and
+            f"@{bot_info.username}".lower() in message.caption.lower()
+        )
+        if not replied_to_bot and not mentioned:
+            return
+
+    # AI se mood samjho
+    reply = get_ai_reply(user_id, "maine tumhe ek sticker bheja 🎭")
+    bot.reply_to(message, reply)
+
+    # Mood ke hisaab se sticker bhejo back (agar IDs available hain)
+    import random
+    all_stickers = [s for lst in STICKERS.values() for s in lst]
+    if all_stickers:
+        bot.send_sticker(message.chat.id, random.choice(all_stickers))
 
 
 @bot.message_handler(func=lambda m: True, content_types=["text"])
@@ -99,10 +151,8 @@ def handle_message(message: telebot.types.Message):
         bot_username = f"@{bot_info.username}"
         bot_id       = bot_info.id
 
-        # Condition 1: Bot ko mention kiya ho
         mentioned = bot_username.lower() in user_text.lower()
 
-        # Condition 2: Aarav ke message ko reply kiya ho
         replied_to_bot = (
             message.reply_to_message is not None and
             message.reply_to_message.from_user is not None and
@@ -110,16 +160,15 @@ def handle_message(message: telebot.types.Message):
         )
 
         if not mentioned and not replied_to_bot:
-            return  # Beech me nahi aana
+            return
 
-        # Tag clean karo message se
         user_text = user_text.replace(bot_username, "").strip()
         if not user_text:
             user_text = "Kya hua?"
 
     bot.send_chat_action(message.chat.id, "typing")
     reply = get_ai_reply(user_id, user_text)
-    bot.send_message(message.chat.id, reply)
+    bot.reply_to(message, reply)
     logger.info("User %s → Bot replied (%d chars)", user_id, len(reply))
 
 
