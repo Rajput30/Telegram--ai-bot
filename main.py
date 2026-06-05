@@ -1,5 +1,7 @@
 import os
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from groq import Groq
 from collections import defaultdict
@@ -94,8 +96,30 @@ def handle_message(message: telebot.types.Message):
     logger.info("User %s → Bot replied (%d chars)", user_id, len(reply))
 
 
+# ── Dummy HTTP Server (Render ke liye) ────────────────────────────────────────
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Aarav bot is running!")
+
+    def log_message(self, format, *args):
+        pass  # HTTP logs band
+
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    logger.info("Health server running on port %d", port)
+    server.serve_forever()
+
+
 # ── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    # HTTP server alag thread me chalao
+    thread = threading.Thread(target=run_health_server, daemon=True)
+    thread.start()
+
     logger.info("Aarav bot is live — polling for messages…")
     bot.remove_webhook()
     bot.infinity_polling(timeout=30, long_polling_timeout=25)
